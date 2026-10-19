@@ -1,3 +1,9 @@
+## Compatibilidad y promociones
+
+Compatible con los elementos actuales de barra lateral y editor, con acceso flotante si no hay barra lateral. Active la purificación para ocultar promociones de descarga de ChatGPT/Codex y de planes, modelos o cuotas. Se comprueban nuevas promociones cada segundo y se usan botones explícitos de cierre cuando existen.
+
+Conserva conversaciones, navegación normal de Codex, pagos, gestión de suscripción y avisos de límite. Oculta promociones, no solicitudes de red. Pasan las 47 pruebas automatizadas. Solo se inspeccionó el DOM real sin sesión; no se validaron promociones reales con sesión. Puede omitir formatos o idiomas desconocidos.
+
 <br><br>
 
 <center><div align="center">

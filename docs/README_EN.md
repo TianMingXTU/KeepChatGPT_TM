@@ -1,3 +1,9 @@
+## Page compatibility and promotional UI
+
+Supports current sidebar/composer landmarks and a floating entry when the sidebar is unavailable. Enable homepage purification to hide ChatGPT desktop/Codex download promotions and plan, model or quota upsells. Late promotions are checked every second; explicitly labeled dismiss buttons are used when available.
+
+Conversation content, ordinary Codex navigation, payment/subscription management and limit-reached notices are preserved. This hides promotional UI, not network requests. All 47 automated tests pass. Only the live signed-out DOM has been inspected; signed-in promotions have not been validated live, and unknown layouts or languages may be missed.
+
 <br><br>
 
 <center><div align="center">

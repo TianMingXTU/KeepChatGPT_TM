@@ -106,7 +106,90 @@
     };
 
     const u = `/api/${GM_info.script.namespace.slice(33, 34)}uth/s${GM_info.script.namespace.slice(28, 29)}ssion`;
-    const symbol1_selector = "nav.flex:not(#stage-sidebar-tiny-bar)";
+    // Semantic landmarks survive the current hashed CSS class names.
+    const symbol1_selector = ":is(#stage-slideover-sidebar, #stage-sidebar, aside nav, nav.flex):not(#stage-sidebar-tiny-bar)";
+    const composer_selector = '#prompt-textarea, #mobile-composer-prompt, textarea[name="prompt"], [contenteditable="true"][role="textbox"]';
+    const getKcgHost = () => $(symbol1_selector) || ($(composer_selector) ? document.body : null);
+    // Exact container markers only: never match prose containing “ad” or “sponsored”.
+    const ad_selector = '[data-testid="ad-container"], [data-testid="ad-card"], [data-testid="sponsored-ad"], [data-ad-slot], [data-ad-unit], iframe[src^="https://googleads.g.doubleclick.net/"], iframe[src^="https://tpc.googlesyndication.com/"]';
+    const adStyleText = `body.kpurifypage :is(${ad_selector}) { display: none !important; }`;
+    global.__test__ = Object.assign(global.__test__ || {}, { getKcgHost, composer_selector, ad_selector, adStyleText });
+    const promotionProtectedSelector = '[data-conversation-transcript], [data-message-author-role], [data-testid^="conversation-turn"], article, #kcg, .kmenu, .kdialog-overlay';
+    const isDownloadPromotion = function (element) {
+        if (element.closest(promotionProtectedSelector)) return false;
+        const text = (element.textContent || element.getAttribute("aria-label") || "").trim();
+        if (text.length > 240) return false;
+        const product = /chatgpt|codex/i.test(text);
+        const action = /下载|安裝|安装|取得|获取|試用|试用|download|install|try|get\b/i.test(text);
+        if (element.matches("a[href]")) {
+            let url;
+            try { url = new URL(element.getAttribute("href"), location.href); } catch { return false; }
+            if (!/^(chatgpt\.com|openai\.com|chat\.openai\.com)$/.test(url.hostname)) return false;
+            const destination = /(?:^|\/)(?:download|desktop)(?:\/|$)/i.test(url.pathname);
+            return (destination && action) || (/^\/codex(?:\/|$)/i.test(url.pathname) && product && action);
+        }
+        return product && action && /桌面|应用|應用|desktop|app|下载|download|安装|install/i.test(text);
+    };
+    const dismissedPromotionButtons = new WeakSet();
+    const dismissPromotion = function (card) {
+        if (!card.matches('[role="dialog"], [role="alertdialog"]')) return;
+        const close = Array.from($$('button', card)).find(button =>
+            !button.disabled && /^(关闭|關閉|暂不|暫不|以后再说|不用了|close(?: dialog)?|dismiss|not now|no thanks|maybe later)$/i.test(
+                (button.getAttribute('aria-label') || button.textContent || '').trim()));
+        if (close && !dismissedPromotionButtons.has(close)) {
+            dismissedPromotionButtons.add(close);
+            close.click();
+        }
+    };
+    const upgradeActionRegex = /升级(?:至|到|你的|您的|您)?\s*(?:套餐|计划|方案|Plus|Pro|Go|Team)|(?:立即|马上)升级|upgrade\s+(?:to|your\s+plan)|(?:get|try)\s+ChatGPT\s+(?:Plus|Pro|Go|Team)/i;
+    const upgradeBenefitRegex = /模型|推理|使用额度|上下文|深度研究|功能|准确性|更强|更深入|解锁|model|reasoning|usage|context|research|unlock|capabilit|higher.*limit/i;
+    const accountOrLimitRegex = /管理订阅|订阅管理|取消订阅|付款|支付|账单|已达到|已达.*上限|达到.{0,12}上限|manage subscription|cancel subscription|billing|payment|limit reached|reached.{0,20}limit/i;
+    const isModelUpsell = function (element) {
+        const dialog = element.closest('[role="dialog"], [role="alertdialog"]');
+        if (dialog && (accountOrLimitRegex.test(dialog.textContent || "") ||
+            dialog.querySelector('input, select, textarea, [contenteditable="true"]'))) return false;
+        if (element.closest(promotionProtectedSelector) ||
+            element.matches('body, main, nav, aside') ||
+            element.querySelector(`${promotionProtectedSelector}, input, select, textarea, [contenteditable="true"], main, nav`)) return false;
+        const text = (element.textContent || "").replace(/\s+/g, " ").trim();
+        const markedPromotion = element.matches('[data-testid*="upsell"], [data-testid*="promo"], [data-testid*="upgrade-banner"]');
+        return text.length <= 1200 && upgradeActionRegex.test(text) &&
+            (upgradeBenefitRegex.test(text) || markedPromotion) && !accountOrLimitRegex.test(text);
+    };
+    const hideModelUpsells = function () {
+        const candidates = new Set($$('[role="dialog"], [role="alertdialog"], [role="tooltip"], [role="banner"], [data-testid*="upsell"], [data-testid*="promo"], [data-testid*="upgrade-banner"]'));
+        // Some promotional cards have no stable ID or dialog role.
+        $$('h1, h2, h3, p, span').forEach(element => {
+            if (!upgradeActionRegex.test(element.textContent || "") || element.closest(promotionProtectedSelector)) return;
+            let parent = element.closest('div, section, [role="dialog"], [role="alertdialog"]') || element.parentElement;
+            for (let depth = 0; parent && depth < 5; depth++, parent = parent.parentElement) {
+                if (isModelUpsell(parent)) { candidates.add(parent); break; }
+            }
+        });
+        candidates.forEach(card => {
+            if (!isModelUpsell(card)) return;
+            card.setAttribute('data-kcg-promotion', 'upsell');
+            // The site's own dismissal releases its backdrop and focus trap.
+            dismissPromotion(card);
+        });
+    };
+    const hideDownloadPromotions = function () {
+        // Re-evaluate reused SPA nodes; CSS makes disabling purification reversible.
+        $$('[data-kcg-promotion]').forEach(el => el.removeAttribute('data-kcg-promotion'));
+        hideModelUpsells();
+        $$('a[href], button, [role="button"]').forEach(element => {
+            if (!isDownloadPromotion(element)) return;
+            let target = element;
+            // Hide a small, isolated promotional banner, never its layout ancestors.
+            const card = element.closest('[role="dialog"], [role="banner"], [data-testid*="banner"], [data-testid*="promo"], [data-testid*="upsell"]');
+            if (card && (card.textContent || "").length <= 800 &&
+                !card.querySelector(`${promotionProtectedSelector}, textarea, [contenteditable="true"], nav, main`) &&
+                !card.closest(promotionProtectedSelector)) target = card;
+            target.setAttribute('data-kcg-promotion', 'download');
+            dismissPromotion(target);
+        });
+    };
+    global.__test__ = Object.assign(global.__test__ || {}, { isDownloadPromotion, hideDownloadPromotions });
     const symbol2_selector =
         "div.sticky div.justify-center.top-0 button span.sr-only";
     const trackingHostRegex =
@@ -492,7 +575,8 @@
                     );
                 }
             };
-            $("main").firstElementChild.lastElementChild.appendChild(nIfr);
+            // Keep the helper outside framework-owned conversation containers.
+            document.body.appendChild(nIfr);
         } else {
             if (u) {
                 $("#xcanwin").src = u;
@@ -943,7 +1027,7 @@
             } else {
                 sv("k_largescreen", true);
             }
-            $("main#main").classList.toggle("largescreen");
+            $("main")?.classList.toggle("largescreen");
             ncheck?.classList.toggle("checked");
         };
 
@@ -1104,7 +1188,7 @@
 
         if (gv("k_largescreen", false) === true) {
             setToggleChecked("nmenuid_ls", true);
-            $("main#main").classList.add("largescreen");
+            $("main")?.classList.add("largescreen");
         }
 
         if (gv("k_speakcompletely", false) === true) {
@@ -1188,20 +1272,11 @@
         ndivkcg._symbol1_innerHTML = `<img src='${icon}' style='width: 1rem;' /><div style='font-size: 0.8rem'>Keep${ndivkcg.id.slice(1, 2).toUpperCase()}hatGPT by x${ndivkcg.id.slice(1, 2)}anwin</div>`;
         ndivkcg._symbol2_innerHTML = `<img src='${icon}' style='width: 1rem;' />`;
 
-        if ($(symbol1_selector)) {
-            ndivkcg.innerHTML = ndivkcg._symbol1_innerHTML;
-            ndivkcg.classList.add("kcg-pc");
-            ndivkcg.classList.remove("kcg-mb");
-            symbol_prt = $(symbol1_selector);
-        } /* else if ($(symbol2_selector)) {
-            ndivkcg.innerHTML = ndivkcg._symbol2_innerHTML;
-            ndivkcg.classList.remove('kcg-pc');
-            ndivkcg.classList.add('kcg-mb');
-            symbol_prt = fp(".sticky", $(symbol2_selector), 4);
-            let gpt_menu = fp(".no-draggable", $(symbol2_selector), 4);
-            gpt_menu.classList.remove('absolute');
-        } */
+        symbol_prt = getKcgHost();
         if (!symbol_prt) return;
+        ndivkcg.innerHTML = ndivkcg._symbol1_innerHTML;
+        ndivkcg.classList.add("kcg-pc");
+        if (symbol_prt === document.body) ndivkcg.classList.add("kcg-floating");
         symbol_prt.insertBefore(ndivkcg, symbol_prt.childNodes[0]);
         loadMenu();
 
@@ -1238,6 +1313,14 @@
     const addStyle = function () {
         $("#kcg-style")?.remove();
         const kcgStyle = GM_addStyle(`
+${adStyleText}
+body.kpurifypage [data-kcg-promotion] { display: none !important; }
+#kcg.kcg-floating {
+    position: fixed; bottom: 16px; left: 16px; z-index: 1000;
+    background: var(--bg-primary, Canvas); color: var(--text-primary, CanvasText);
+    padding: 10px; border: 1px solid currentColor; border-radius: 8px;
+}
+
 /*
 :root {
     --keenobservation-user-image-url: '';
@@ -2645,6 +2728,13 @@ ${previewText ? `<br>
     };
 
     const setPromptRichText = function (promptTextarea, contentProseMirror) {
+        if ("value" in promptTextarea) {
+            const container = document.createElement("div");
+            container.innerHTML = contentProseMirror;
+            setPromptPlainText(promptTextarea, Array.from(container.childNodes).map(node => node.textContent).join("\n"));
+            promptTextarea.focus();
+            return;
+        }
         promptTextarea.innerHTML = "";
         promptTextarea.focus();
 
@@ -2704,7 +2794,7 @@ ${previewText ? `<br>
                 event.clientY <= logoBottom
             ) {
                 const contentElement = $(".whitespace-pre-wrap", event.target);
-                const promptTextarea = $("form.w-full #prompt-textarea");
+                const promptTextarea = $(composer_selector);
                 if (!contentElement || !promptTextarea) return;
                 const content = contentElement.innerHTML.trim();
                 const content_ProseMirror = content
@@ -2720,6 +2810,7 @@ ${previewText ? `<br>
     净化页面
     */
     const purifyPage = function () {
+        hideDownloadPromotions();
         if (
             location.href.match(
                 /https:\/\/(chatgpt\.com|chat\.openai\.com)\/\??/,
@@ -2756,32 +2847,15 @@ ${previewText ? `<br>
     };
 
     const dataSec = function () {
-        muob("form.w-full #prompt-textarea", $(`body`), () => {
-            if (gv("k_datasecblocklist", datasec_blocklist_default)) {
-                $("form.w-full #prompt-textarea")?.addEventListener(
-                    "input",
-                    dataSec.listen_input,
-                );
-                $("form.w-full #prompt-textarea")?.addEventListener(
-                    "paste",
-                    dataSec.listen_input,
-                );
-            } else {
-                $("form.w-full #prompt-textarea")?.removeEventListener(
-                    "input",
-                    dataSec.listen_input,
-                );
-                $("form.w-full #prompt-textarea")?.removeEventListener(
-                    "paste",
-                    dataSec.listen_input,
-                );
-            }
-        });
+        // Delegation handles an already mounted composer and SPA replacements.
+        document.addEventListener("input", dataSec.listen_input);
+        document.addEventListener("paste", dataSec.listen_input);
     };
 
     dataSec.listen_input = function (event) {
+        if (!event.target?.matches(composer_selector)) return;
         const scanPrompt = function () {
-            const promptTextarea = $("form.w-full #prompt-textarea");
+            const promptTextarea = $(composer_selector);
             if (!promptTextarea) return;
 
             const result = sanitizeDataSecText(
@@ -2986,16 +3060,16 @@ ${previewText ? `<br>
     };
 
     const nInterval1Fun = function () {
-        byebyeCF();
-        if ($(symbol1_selector) || $(symbol2_selector)) {
-            if ($(symbol1_selector) && !$("#kcg")) loadKCG();
+        if (document.body.classList.contains("kpurifypage")) hideDownloadPromotions();
+        if (getKcgHost()) {
+            if (!$("#kcg")) loadKCG();
             setIfr();
             speakCompletely();
         }
     };
 
     const nInterval2Fun = function () {
-        if ($(symbol1_selector) || $(symbol2_selector)) {
+        if (getKcgHost()) {
             keepChat();
         }
     };
@@ -3047,7 +3121,7 @@ ${previewText ? `<br>
 
     const bootKCG = function () {
         if (kcgBooted) return;
-        if (!$(symbol1_selector)) return;
+        if (!getKcgHost()) return;
 
         kcgBooted = true;
         if (kcgBootTimer) {
@@ -3075,7 +3149,7 @@ ${previewText ? `<br>
 
         onDomStable(() => {
             if (kcgBooted) return;
-            if (!$(symbol1_selector)) return;
+            if (!getKcgHost()) return;
 
             if (kcgBootTimer) {
                 clearTimeout(kcgBootTimer);
