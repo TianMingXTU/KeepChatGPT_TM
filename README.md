@@ -86,7 +86,7 @@
 
 | 序号 | UserScript源 | 备注 |
 | --- | --- | --- |
-| 1 | [Github开源社区](https://raw.githubusercontent.com/xcanwin/KeepChatGPT/main/KeepChatGPT.user.js) | ✅推荐 |
+| 1 | [Github开源社区](https://raw.githubusercontent.com/TianMingXTU/KeepChatGPT_TM/main/KeepChatGPT.user.js) | ✅推荐 |
 
 ~~虚假渠道~~❌:
 

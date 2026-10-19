@@ -137,7 +137,7 @@ Los navegadores recomendados son `Chrome`, `Firefox`, `Edge` y otros navegadores
 
 |  | Origen UserScript |
 | --- | --- |
-| 1 | [Github](https://raw.githubusercontent.com/xcanwin/KeepChatGPT/main/KeepChatGPT.user.js) |
+| 1 | [Github](https://raw.githubusercontent.com/TianMingXTU/KeepChatGPT_TM/main/KeepChatGPT.user.js) |
 
 *   El autor solo proporciona el método de instalación del script de usuario, y la fuente oficial es solo la anterior.
 *   El autor piensa que los scripts de usuario son mejores que las extensiones. Todos pueden auditar la seguridad en cualquier momento, y todos pueden averiguar si hay datos cargados en secreto.

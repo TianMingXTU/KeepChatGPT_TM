@@ -87,7 +87,7 @@ Official Channels✅:
 
 | Serial number | UserScript | Remarks |
 | --- | --- | --- |
-| 1 | [Github](https://raw.githubusercontent.com/xcanwin/KeepChatGPT/main/KeepChatGPT.user.js) | ✅Recommended |
+| 1 | [Github](https://raw.githubusercontent.com/TianMingXTU/KeepChatGPT_TM/main/KeepChatGPT.user.js) | ✅Recommended |
 
 ~~Fake channels~~❌:
 
